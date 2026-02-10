@@ -1,6 +1,17 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { useAgent } from "agents/react";
-import { emptyProfile, type PersonalReadmeProfile } from "../lib/personal-readme-types";
+import {
+  collaborationPreferenceOptions,
+  communicationChannelOptions,
+  emptyProfile,
+  feedbackPreferenceOptions,
+  growthAreaFocusOptions,
+  meetingPreferenceOptions,
+  requiredProfileFields,
+  timezoneOptions,
+  type PersonalReadmeProfile,
+  type SaveProfileResult
+} from "../lib/personal-readme-types";
 
 const normalizeUsername = (value: string): string =>
   value.trim().toLowerCase().replace(/\s+/g, "-");
@@ -13,7 +24,7 @@ type EditorProps = {
   username: string;
 };
 
-type SaveStatus = "idle" | "saving" | "saved" | "error";
+type SaveStatus = "idle" | "saving" | "saved" | "validation" | "error";
 
 export function PersonalReadmeLauncher(_props: LauncherProps) {
   const [username, setUsername] = useState("");
@@ -55,6 +66,7 @@ export default function PersonalReadmeBuilder({ username }: EditorProps) {
   const normalizedUsername = normalizeUsername(username);
   const [draft, setDraft] = useState<PersonalReadmeProfile>(() => emptyProfile(normalizedUsername));
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
 
   const onStateUpdate = useCallback(
     (nextState: PersonalReadmeProfile) => {
@@ -74,33 +86,68 @@ export default function PersonalReadmeBuilder({ username }: EditorProps) {
   });
   useEffect(() => {
     setDraft(emptyProfile(normalizedUsername));
+    setFieldErrors({});
   }, [normalizedUsername]);
 
-  const fields = useMemo(
+  const completedRequired = useMemo(
     () =>
-      [
-        ["displayName", "Display name", "How should co-workers address you?"],
-        ["role", "Role", "Your role and team"],
-        ["timezone", "Timezone", "Ex: PT (UTC-8)"],
-        ["communicationStyle", "Communication style", "Direct, detailed, async-first, etc."],
-        ["collaborationPreferences", "Collaboration preferences", "Pairing, docs-first, brainstorming, etc."],
-        ["feedbackPreferences", "Feedback preferences", "In-the-moment, async notes, 1:1, etc."],
-        ["meetingPreferences", "Meeting preferences", "Preferred cadence and style"],
-        ["focusHours", "Focus hours", "When should people avoid interruptions?"],
-        ["strengths", "Strengths", "Where you can help most"],
-        ["growthAreas", "Growth areas", "What you are learning right now"]
-      ] as const,
-    []
+      requiredProfileFields.filter((field) => {
+        const value = draft[field];
+        return typeof value === "string" && value.trim().length > 0;
+      }).length,
+    [draft]
   );
+
+  const setStringField = (field: keyof PersonalReadmeProfile, value: string) => {
+    setSaveStatus("idle");
+    setFieldErrors((current) => {
+      if (!current[field]) {
+        return current;
+      }
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
+    setDraft((current) => ({ ...current, [field]: value }));
+  };
+
+  const toggleOption = (
+    field:
+      | "communicationChannels"
+      | "collaborationPreferences"
+      | "feedbackPreferences"
+      | "meetingPreferences"
+      | "growthAreaFocuses",
+    option: string,
+    checked: boolean
+  ) => {
+    setSaveStatus("idle");
+    setDraft((current) => {
+      const nextValues = checked
+        ? [...current[field], option]
+        : current[field].filter((value) => value !== option);
+      return { ...current, [field]: nextValues };
+    });
+  };
 
   const saveProfile = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSaveStatus("saving");
+    setFieldErrors({});
+
     try {
-      agent.setState({
+      const result = (await agent.stub.saveProfile({
         ...draft,
         username: normalizedUsername
-      });
+      })) as SaveProfileResult;
+
+      if (!result.ok) {
+        setFieldErrors(result.fieldErrors ?? {});
+        setSaveStatus("validation");
+        return;
+      }
+
+      setDraft(result.state);
       setSaveStatus("saved");
     } catch {
       setSaveStatus("error");
@@ -115,24 +162,167 @@ export default function PersonalReadmeBuilder({ username }: EditorProps) {
         <p className="helper">
           <a href="/">Create/open a different profile</a>
         </p>
+        <p className="helper">
+          Required fields completed: {completedRequired}/{requiredProfileFields.length}
+        </p>
 
         <form onSubmit={saveProfile} className="card">
           <div className="form-grid">
-            {fields.map(([key, label, placeholder]) => (
-              <label key={key}>
-                {label}
-                <textarea
-                  value={draft[key]}
-                  onChange={(event) => {
-                    const value = event.target.value;
-                    setSaveStatus("idle");
-                    setDraft((current) => ({ ...current, [key]: value }));
-                  }}
-                  placeholder={placeholder}
-                  rows={key === "communicationStyle" || key === "collaborationPreferences" ? 3 : 2}
-                />
-              </label>
-            ))}
+            <label>
+              Display name
+              <input
+                value={draft.displayName}
+                onChange={(event) => setStringField("displayName", event.target.value)}
+                placeholder="How should teammates address you?"
+              />
+              {fieldErrors.displayName?.[0] ? <span className="error">{fieldErrors.displayName[0]}</span> : null}
+            </label>
+
+            <label>
+              Role
+              <input
+                value={draft.role}
+                onChange={(event) => setStringField("role", event.target.value)}
+                placeholder="Your role and team"
+              />
+              {fieldErrors.role?.[0] ? <span className="error">{fieldErrors.role[0]}</span> : null}
+            </label>
+
+            <label>
+              Timezone
+              <select value={draft.timezone} onChange={(event) => setStringField("timezone", event.target.value)}>
+                <option value="">Select a timezone</option>
+                {timezoneOptions.map((timezone) => (
+                  <option key={timezone} value={timezone}>
+                    {timezone}
+                  </option>
+                ))}
+              </select>
+              {fieldErrors.timezone?.[0] ? <span className="error">{fieldErrors.timezone[0]}</span> : null}
+            </label>
+
+            <label>
+              Communication style notes
+              <textarea
+                value={draft.communicationStyle}
+                onChange={(event) => setStringField("communicationStyle", event.target.value)}
+                placeholder="Direct, detailed, async-first, etc."
+                rows={3}
+              />
+            </label>
+
+            <fieldset>
+              <legend>Preferred channels</legend>
+              {communicationChannelOptions.map((option) => (
+                <label key={option} className="check-row">
+                  <input
+                    type="checkbox"
+                    checked={draft.communicationChannels.includes(option)}
+                    onChange={(event) =>
+                      toggleOption("communicationChannels", option, event.currentTarget.checked)
+                    }
+                  />
+                  <span>{option}</span>
+                </label>
+              ))}
+            </fieldset>
+
+            <fieldset>
+              <legend>Collaboration preferences</legend>
+              {collaborationPreferenceOptions.map((option) => (
+                <label key={option} className="check-row">
+                  <input
+                    type="checkbox"
+                    checked={draft.collaborationPreferences.includes(option)}
+                    onChange={(event) =>
+                      toggleOption("collaborationPreferences", option, event.currentTarget.checked)
+                    }
+                  />
+                  <span>{option}</span>
+                </label>
+              ))}
+            </fieldset>
+
+            <fieldset>
+              <legend>Feedback preferences</legend>
+              {feedbackPreferenceOptions.map((option) => (
+                <label key={option} className="check-row">
+                  <input
+                    type="checkbox"
+                    checked={draft.feedbackPreferences.includes(option)}
+                    onChange={(event) => toggleOption("feedbackPreferences", option, event.currentTarget.checked)}
+                  />
+                  <span>{option}</span>
+                </label>
+              ))}
+            </fieldset>
+
+            <fieldset>
+              <legend>Meeting preferences</legend>
+              {meetingPreferenceOptions.map((option) => (
+                <label key={option} className="check-row">
+                  <input
+                    type="checkbox"
+                    checked={draft.meetingPreferences.includes(option)}
+                    onChange={(event) => toggleOption("meetingPreferences", option, event.currentTarget.checked)}
+                  />
+                  <span>{option}</span>
+                </label>
+              ))}
+            </fieldset>
+
+            <fieldset>
+              <legend>Growth focus areas</legend>
+              {growthAreaFocusOptions.map((option) => (
+                <label key={option} className="check-row">
+                  <input
+                    type="checkbox"
+                    checked={draft.growthAreaFocuses.includes(option)}
+                    onChange={(event) => toggleOption("growthAreaFocuses", option, event.currentTarget.checked)}
+                  />
+                  <span>{option}</span>
+                </label>
+              ))}
+            </fieldset>
+
+            <label>
+              Collaboration notes
+              <textarea
+                value={draft.collaborationNotes}
+                onChange={(event) => setStringField("collaborationNotes", event.target.value)}
+                placeholder="Pairing, docs-first workflow, handoff expectations, etc."
+                rows={3}
+              />
+            </label>
+
+            <label>
+              Focus hours
+              <input
+                value={draft.focusHours}
+                onChange={(event) => setStringField("focusHours", event.target.value)}
+                placeholder="When should people avoid interruptions?"
+              />
+            </label>
+
+            <label>
+              Strengths
+              <textarea
+                value={draft.strengths}
+                onChange={(event) => setStringField("strengths", event.target.value)}
+                placeholder="Where you can help most"
+                rows={3}
+              />
+            </label>
+
+            <label>
+              Growth notes
+              <textarea
+                value={draft.growthAreas}
+                onChange={(event) => setStringField("growthAreas", event.target.value)}
+                placeholder="What you are learning right now"
+                rows={3}
+              />
+            </label>
           </div>
 
           <div className="actions">
@@ -140,6 +330,7 @@ export default function PersonalReadmeBuilder({ username }: EditorProps) {
             <span className="helper" aria-live="polite">
               {saveStatus === "saving" && "Saving..."}
               {saveStatus === "saved" && "Saved to Agent"}
+              {saveStatus === "validation" && "Please fix validation errors"}
               {saveStatus === "error" && "Save failed. Try again."}
             </span>
           </div>

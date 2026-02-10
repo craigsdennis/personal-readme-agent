@@ -5,6 +5,7 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "personal-readme-agent",
+	"account_id": "51e28e9a83197a9f12a2e39f9477ba4e",
 	"main": "./dist/_worker.js/index.js",
 	"compatibility_date": "2026-02-05",
 	"compatibility_flags": [
