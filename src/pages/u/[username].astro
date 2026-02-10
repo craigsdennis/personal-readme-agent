@@ -1,0 +1,23 @@
+---
+import PersonalReadmeBuilder from "../../components/PersonalReadmeBuilder";
+import "../../styles/app.css";
+
+const username = (Astro.params.username ?? "").trim();
+if (!username) {
+  return Astro.redirect("/");
+}
+---
+
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<link rel="icon" href="/favicon.ico" />
+		<meta name="viewport" content="width=device-width" />
+		<meta name="generator" content={Astro.generator} />
+		<title>Personal README - {username}</title>
+	</head>
+	<body>
+		<PersonalReadmeBuilder username={username} client:load />
+	</body>
+</html>

@@ -1,5 +1,6 @@
 ---
-
+import { PersonalReadmeLauncher } from "../components/PersonalReadmeBuilder";
+import "../styles/app.css";
 ---
 
 <html lang="en">
@@ -9,9 +10,9 @@
 		<link rel="icon" href="/favicon.ico" />
 		<meta name="viewport" content="width=device-width" />
 		<meta name="generator" content={Astro.generator} />
-		<title>Astro</title>
+		<title>Personal README Agent Demo</title>
 	</head>
 	<body>
-		<h1>Astro</h1>
+		<PersonalReadmeLauncher client:load />
 	</body>
 </html>
