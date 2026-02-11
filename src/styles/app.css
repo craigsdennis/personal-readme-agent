@@ -156,12 +156,86 @@ legend {
   font-weight: 500;
 }
 
+.error-panel {
+  margin-top: 0.85rem;
+  border: 1px solid #f5c2c7;
+  background: #fff5f6;
+  border-radius: 10px;
+  padding: 0.75rem;
+}
+
+.readme-page {
+  width: min(900px, 100%);
+  padding: 2rem;
+}
+
+.readme-header {
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 1.2rem;
+}
+
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.78rem;
+  color: var(--accent);
+  font-weight: 700;
+  margin: 0;
+}
+
+.subtitle {
+  margin-top: 0.5rem;
+  font-size: 1.02rem;
+}
+
+.readme-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.readme-section {
+  margin-top: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  padding: 1rem;
+}
+
+.readme-section h2 {
+  margin-bottom: 0.6rem;
+}
+
+.readme-section h3 {
+  margin: 0.8rem 0 0.4rem;
+  font-size: 0.95rem;
+}
+
+.readme-section p {
+  margin: 0.2rem 0 0.5rem;
+  color: var(--ink);
+}
+
+.readme-section ul {
+  margin: 0.2rem 0 0.6rem 1.1rem;
+  padding: 0;
+}
+
+.readme-section li {
+  margin: 0.2rem 0;
+}
+
 @media (min-width: 760px) {
   .panel {
     padding: 2rem;
   }
 
   .form-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .readme-grid {
     grid-template-columns: 1fr 1fr;
   }
 }

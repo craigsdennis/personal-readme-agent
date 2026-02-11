@@ -6,4 +6,5 @@ declare namespace App {
 
 interface Env {
 	PersonalReadmeAgent: DurableObjectNamespace;
+	OPENAI_API_KEY?: string;
 }

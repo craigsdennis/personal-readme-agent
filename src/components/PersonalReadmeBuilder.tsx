@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useAgent } from "agents/react";
 import {
+  type AgentRuntimeDiagnostics,
   collaborationPreferenceOptions,
   communicationChannelOptions,
   emptyProfile,
@@ -10,7 +11,8 @@ import {
   requiredProfileFields,
   timezoneOptions,
   type PersonalReadmeProfile,
-  type SaveProfileResult
+  type SaveProfileResult,
+  type UpdateFromTextResult
 } from "../lib/personal-readme-types";
 
 const normalizeUsername = (value: string): string =>
@@ -25,6 +27,7 @@ type EditorProps = {
 };
 
 type SaveStatus = "idle" | "saving" | "saved" | "validation" | "error";
+type DebugStatus = "idle" | "applying" | "applied" | "checking" | "error";
 
 export function PersonalReadmeLauncher(_props: LauncherProps) {
   const [username, setUsername] = useState("");
@@ -67,22 +70,34 @@ export default function PersonalReadmeBuilder({ username }: EditorProps) {
   const [draft, setDraft] = useState<PersonalReadmeProfile>(() => emptyProfile(normalizedUsername));
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
-
-  const onStateUpdate = useCallback(
-    (nextState: PersonalReadmeProfile) => {
-      setDraft((current) => ({
-        ...current,
-        ...nextState,
-        username: normalizedUsername
-      }));
-    },
-    [normalizedUsername]
-  );
+  const [debugText, setDebugText] = useState("");
+  const [debugStatus, setDebugStatus] = useState<DebugStatus>("idle");
+  const [debugMessage, setDebugMessage] = useState("");
+  const [debugPatch, setDebugPatch] = useState("");
+  const [debugErrorDetails, setDebugErrorDetails] = useState("");
+  const [debugDiagnostics, setDebugDiagnostics] = useState<AgentRuntimeDiagnostics | null>(null);
 
   const agent = useAgent<PersonalReadmeProfile>({
     agent: "PersonalReadmeAgent",
     name: normalizedUsername,
-    onStateUpdate
+    onStateUpdate: (nextState) => {
+      setDraft({
+        username: normalizedUsername,
+        displayName: nextState.displayName ?? "",
+        role: nextState.role ?? "",
+        timezone: nextState.timezone ?? "",
+        communicationChannels: nextState.communicationChannels ?? [],
+        communicationStyle: nextState.communicationStyle ?? "",
+        collaborationPreferences: nextState.collaborationPreferences ?? [],
+        collaborationNotes: nextState.collaborationNotes ?? "",
+        feedbackPreferences: nextState.feedbackPreferences ?? [],
+        meetingPreferences: nextState.meetingPreferences ?? [],
+        focusHours: nextState.focusHours ?? "",
+        strengths: nextState.strengths ?? "",
+        growthAreaFocuses: nextState.growthAreaFocuses ?? [],
+        growthAreas: nextState.growthAreas ?? ""
+      });
+    }
   });
   useEffect(() => {
     setDraft(emptyProfile(normalizedUsername));
@@ -154,6 +169,58 @@ export default function PersonalReadmeBuilder({ username }: EditorProps) {
     }
   };
 
+  const applyDebugText = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setDebugStatus("applying");
+    setDebugMessage("");
+    setDebugPatch("");
+    setDebugErrorDetails("");
+    setDebugDiagnostics(null);
+
+    try {
+      const result = (await agent.stub.updateFromText({
+        text: debugText
+      })) as UpdateFromTextResult;
+
+      if (!result.ok) {
+        setDebugStatus("error");
+        setDebugMessage("Could not apply text update.");
+        setDebugErrorDetails(result.cause ? `${result.error}: ${result.cause}` : result.error);
+        setDebugDiagnostics(result.diagnostics);
+        return;
+      }
+
+      setDraft(result.state);
+      setDebugStatus("applied");
+      setDebugMessage("Text parsed and merged into state.");
+      setDebugPatch(JSON.stringify(result.patch, null, 2));
+      setDebugDiagnostics(result.diagnostics);
+    } catch {
+      setDebugStatus("error");
+      setDebugMessage("Could not apply text update.");
+      setDebugErrorDetails(
+        "Request failed before a valid response. Check OPENAI_API_KEY, network access, and that your text is not empty."
+      );
+    }
+  };
+
+  const checkRuntimeDiagnostics = async () => {
+    setDebugStatus("checking");
+    setDebugMessage("");
+    setDebugErrorDetails("");
+    setDebugPatch("");
+
+    try {
+      const diagnostics = (await agent.stub.getRuntimeDiagnostics()) as AgentRuntimeDiagnostics;
+      setDebugDiagnostics(diagnostics);
+      setDebugStatus("idle");
+    } catch {
+      setDebugStatus("error");
+      setDebugMessage("Could not fetch runtime diagnostics.");
+      setDebugErrorDetails("Agent RPC failed while reading runtime env values.");
+    }
+  };
+
   return (
     <main className="app-shell">
       <section className="panel">
@@ -161,6 +228,8 @@ export default function PersonalReadmeBuilder({ username }: EditorProps) {
         <p>Editing profile for @{normalizedUsername}</p>
         <p className="helper">
           <a href="/">Create/open a different profile</a>
+          {"  •  "}
+          <a href={`/u/${encodeURIComponent(normalizedUsername)}/view`}>Read-only view</a>
         </p>
         <p className="helper">
           Required fields completed: {completedRequired}/{requiredProfileFields.length}
@@ -335,6 +404,57 @@ export default function PersonalReadmeBuilder({ username }: EditorProps) {
             </span>
           </div>
         </form>
+
+        <section className="card debug-card">
+          <h2>Debug: Update From Text</h2>
+          <p className="helper">Paste a sentence and test `updateFromText({`{"text"}`})`.</p>
+          <form onSubmit={applyDebugText}>
+            <label>
+              Debug text
+              <textarea
+                value={debugText}
+                onChange={(event) => setDebugText(event.target.value)}
+                placeholder="Example: I'm in ET, prefer async docs first, and like direct feedback."
+                rows={4}
+              />
+            </label>
+            <div className="actions">
+              <button type="submit">Apply text update</button>
+              <button type="button" onClick={checkRuntimeDiagnostics}>
+                Check runtime env
+              </button>
+              <span className="helper" aria-live="polite">
+                {debugStatus === "applying" && "Applying..."}
+                {debugStatus === "checking" && "Checking runtime env..."}
+                {debugStatus === "applied" && debugMessage}
+                {debugStatus === "error" && debugMessage}
+              </span>
+            </div>
+          </form>
+          {debugStatus === "error" ? (
+            <div className="error-panel" role="alert">
+              <strong>{debugMessage}</strong>
+              <p className="helper">Details: {debugErrorDetails}</p>
+              <p className="helper">
+                Quick checks: set `OPENAI_API_KEY`, use non-empty text, and ensure the model can return structured
+                JSON.
+              </p>
+            </div>
+          ) : null}
+          {debugDiagnostics ? (
+            <pre className="debug-output">
+              {JSON.stringify(
+                {
+                  runtimeHasOpenAIKey: debugDiagnostics.hasOpenAIKey,
+                  runtimeOpenAIKeyLength: debugDiagnostics.openAIKeyLength
+                },
+                null,
+                2
+              )}
+            </pre>
+          ) : null}
+          {debugPatch ? <pre className="debug-output">{debugPatch}</pre> : null}
+        </section>
       </section>
     </main>
   );

@@ -124,8 +124,76 @@ export const personalReadmeSaveSchema = personalReadmeProfileSchema.superRefine(
   }
 });
 
+export const personalReadmeProfilePatchSchema = z
+  .object({
+    displayName: z.string().trim().max(80).optional(),
+    role: z.string().trim().max(120).optional(),
+    timezone: z.enum(timezoneOptions).optional(),
+    communicationChannels: z.array(z.enum(communicationChannelOptions)).optional(),
+    collaborationPreferences: z.array(z.enum(collaborationPreferenceOptions)).optional(),
+    feedbackPreferences: z.array(z.enum(feedbackPreferenceOptions)).optional(),
+    meetingPreferences: z.array(z.enum(meetingPreferenceOptions)).optional(),
+    growthAreaFocuses: z.array(z.enum(growthAreaFocusOptions)).optional(),
+    communicationStyle: z.string().trim().max(300).optional(),
+    collaborationNotes: z.string().trim().max(300).optional(),
+    focusHours: z.string().trim().max(120).optional(),
+    strengths: z.string().trim().max(500).optional(),
+    growthAreas: z.string().trim().max(500).optional()
+  })
+  .strict();
+
+export const personalReadmeModelPatchSchema = z
+  .object({
+    displayName: z.string().trim().max(80).nullable(),
+    role: z.string().trim().max(120).nullable(),
+    timezone: z.enum(timezoneOptions).nullable(),
+    communicationChannels: z
+      .object({
+        add: z.array(z.enum(communicationChannelOptions)),
+        remove: z.array(z.enum(communicationChannelOptions))
+      })
+      .strict(),
+    collaborationPreferences: z
+      .object({
+        add: z.array(z.enum(collaborationPreferenceOptions)),
+        remove: z.array(z.enum(collaborationPreferenceOptions))
+      })
+      .strict(),
+    feedbackPreferences: z
+      .object({
+        add: z.array(z.enum(feedbackPreferenceOptions)),
+        remove: z.array(z.enum(feedbackPreferenceOptions))
+      })
+      .strict(),
+    meetingPreferences: z
+      .object({
+        add: z.array(z.enum(meetingPreferenceOptions)),
+        remove: z.array(z.enum(meetingPreferenceOptions))
+      })
+      .strict(),
+    growthAreaFocuses: z
+      .object({
+        add: z.array(z.enum(growthAreaFocusOptions)),
+        remove: z.array(z.enum(growthAreaFocusOptions))
+      })
+      .strict(),
+    communicationStyle: z.string().trim().max(300).nullable(),
+    collaborationNotes: z.string().trim().max(300).nullable(),
+    focusHours: z.string().trim().max(120).nullable(),
+    strengths: z.string().trim().max(500).nullable(),
+    growthAreas: z.string().trim().max(500).nullable()
+  })
+  .strict();
+
 export type PersonalReadmeProfile = z.output<typeof personalReadmeProfileSchema>;
 export type PersonalReadmeProfileInput = z.input<typeof personalReadmeProfileSchema>;
+export type PersonalReadmeProfilePatch = z.output<typeof personalReadmeProfilePatchSchema>;
+export type PersonalReadmeModelPatch = z.output<typeof personalReadmeModelPatchSchema>;
+
+export type AgentRuntimeDiagnostics = {
+  hasOpenAIKey: boolean;
+  openAIKeyLength: number;
+};
 
 export type SaveProfileResult =
   | {
@@ -136,6 +204,20 @@ export type SaveProfileResult =
       ok: false;
       error: string;
       fieldErrors?: Record<string, string[]>;
+    };
+
+export type UpdateFromTextResult =
+  | {
+      ok: true;
+      state: PersonalReadmeProfile;
+      patch: PersonalReadmeProfilePatch;
+      diagnostics: AgentRuntimeDiagnostics;
+    }
+  | {
+      ok: false;
+      error: string;
+      diagnostics: AgentRuntimeDiagnostics;
+      cause?: string;
     };
 
 export const emptyProfile = (username = ""): PersonalReadmeProfile =>
