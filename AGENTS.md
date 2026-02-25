@@ -17,15 +17,15 @@ Build an educational demo that creates a “Personal README” for co-workers us
 - `src/pages/u/[username].astro`: Per-user editor route
 - `src/pages/u/[username]/view.astro`: Per-user read-only display route
 - `wrangler.jsonc`: Durable Object binding + migrations
-- `.dev.vars` / `.dev.vars.example`: Local worker env vars (including `OPENAI_API_KEY`)
+- `.dev.vars` / `.dev.vars.example`: Local worker env vars
 
 ## Agent Methods (Current)
 - `saveProfile(payload)`: Validates and saves full profile via Zod.
-- `updateFromText({ text })`: Uses OpenAI structured output to extract updates, then merges into current state.
-- `getRuntimeDiagnostics()`: Returns runtime env diagnostics (for example, whether `OPENAI_API_KEY` is visible in the agent runtime).
+- `updateFromText({ text })`: Uses Workers AI structured JSON output to extract updates, then merges into current state.
+- `getRuntimeDiagnostics()`: Returns runtime env diagnostics (for example, whether `AI` binding is visible in the agent runtime and which model is selected).
 
 ## AI Update Behavior
-- Structured output schema is separate from UI schema to satisfy OpenAI structured output constraints.
+- Structured output schema is separate from UI schema to satisfy Workers AI structured JSON constraints.
 - Checkbox/list fields are updated incrementally using `add`/`remove` operations (not full replacement).
 - Text fields remain nullable in model output and are merged only when provided.
 

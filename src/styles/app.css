@@ -164,6 +164,24 @@ legend {
   padding: 0.75rem;
 }
 
+.job-list {
+  margin-top: 0.85rem;
+}
+
+.job-list ul {
+  margin: 0.4rem 0 0;
+  padding-left: 1.1rem;
+}
+
+.job-list li {
+  margin: 0.35rem 0;
+  color: var(--ink);
+}
+
+.job-error {
+  color: #b42318;
+}
+
 .readme-page {
   width: min(900px, 100%);
   padding: 2rem;

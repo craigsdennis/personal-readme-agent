@@ -185,15 +185,61 @@ export const personalReadmeModelPatchSchema = z
   })
   .strict();
 
+export const updateFromTextPayloadSchema = z.object({
+  text: z.string().trim().min(1).max(4000)
+});
+
+export const queuedTextUpdatePayloadSchema = z.object({
+  id: z.string().trim().min(1),
+  text: z.string().trim().min(1).max(4000)
+});
+
+export const textUpdateJobStatusSchema = z.enum(["queued", "processing", "done", "failed"]);
+
+export const textUpdateJobSchema = z.object({
+  id: z.string(),
+  text: z.string(),
+  status: textUpdateJobStatusSchema,
+  error: z.string().optional(),
+  createdAt: z.number().int(),
+  updatedAt: z.number().int()
+});
+
+export const textUpdateJobDbRowSchema = z
+  .object({
+    id: z.string(),
+    text: z.string(),
+    status: textUpdateJobStatusSchema,
+    error: z.string().nullable(),
+    created_at: z.number().int(),
+    updated_at: z.number().int()
+  })
+  .transform((row) =>
+    textUpdateJobSchema.parse({
+      id: row.id,
+      text: row.text,
+      status: row.status,
+      error: row.error || undefined,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    })
+  );
+
+export const textUpdateJobsSchema = z.array(textUpdateJobSchema);
+
 export type PersonalReadmeProfile = z.output<typeof personalReadmeProfileSchema>;
 export type PersonalReadmeProfileInput = z.input<typeof personalReadmeProfileSchema>;
 export type PersonalReadmeProfilePatch = z.output<typeof personalReadmeProfilePatchSchema>;
 export type PersonalReadmeModelPatch = z.output<typeof personalReadmeModelPatchSchema>;
 
 export type AgentRuntimeDiagnostics = {
-  hasOpenAIKey: boolean;
-  openAIKeyLength: number;
+  hasWorkersAIBinding: boolean;
+  workersAIModel: string;
 };
+
+export type TextUpdateJobStatus = z.output<typeof textUpdateJobStatusSchema>;
+
+export type TextUpdateJob = z.output<typeof textUpdateJobSchema>;
 
 export type SaveProfileResult =
   | {
@@ -209,8 +255,8 @@ export type SaveProfileResult =
 export type UpdateFromTextResult =
   | {
       ok: true;
-      state: PersonalReadmeProfile;
-      patch: PersonalReadmeProfilePatch;
+      queuedId: string;
+      jobs: TextUpdateJob[];
       diagnostics: AgentRuntimeDiagnostics;
     }
   | {
@@ -224,3 +270,11 @@ export const emptyProfile = (username = ""): PersonalReadmeProfile =>
   personalReadmeProfileSchema.parse({
     username: username || "new-user"
   });
+
+export const normalizeProfileState = (state: unknown, fallbackUsername = ""): PersonalReadmeProfile => {
+  const parsed = personalReadmeProfileSchema.safeParse(state);
+  if (parsed.success) {
+    return parsed.data;
+  }
+  return emptyProfile(fallbackUsername);
+};
