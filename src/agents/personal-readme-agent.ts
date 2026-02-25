@@ -1,5 +1,6 @@
 import { Agent, callable } from "agents";
 import { z } from "zod";
+import OpenAI from "openai";
 import {
   type AgentRuntimeDiagnostics,
   type TextUpdateJob,
@@ -67,8 +68,8 @@ export class PersonalReadmeAgent extends Agent<Env, PersonalReadmeProfile> {
       return { ok: false, error: "A non-empty text string is required", diagnostics };
     }
 
-    if (!this.env.AI) {
-      return { ok: false, error: "Workers AI binding is not configured", diagnostics };
+    if (!this.env.AI && !this.env.OPENAI_API_KEY) {
+      return { ok: false, error: "Neither Workers AI binding nor OPENAI_API_KEY is configured", diagnostics };
     }
 
     this.ensureTextUpdateJobsTable();
@@ -142,11 +143,19 @@ export class PersonalReadmeAgent extends Agent<Env, PersonalReadmeProfile> {
     return rows.map((row) => textUpdateJobDbRowSchema.parse(row));
   }
 
+  @callable({ description: "Delete all text update job history" })
+  async clearTextUpdateJobs(): Promise<void> {
+    this.ensureTextUpdateJobsTable();
+    this.sql`DELETE FROM personal_readme_text_updates`;
+  }
+
   @callable({ description: "Return runtime diagnostics for environment configuration" })
   getRuntimeDiagnostics(): AgentRuntimeDiagnostics {
     return {
       hasWorkersAIBinding: Boolean(this.env.AI),
-      workersAIModel
+      workersAIModel,
+      hasOpenAIKey: Boolean(this.env.OPENAI_API_KEY),
+      openAIKeyLength: this.env.OPENAI_API_KEY?.length ?? 0
     };
   }
 
@@ -165,30 +174,39 @@ export class PersonalReadmeAgent extends Agent<Env, PersonalReadmeProfile> {
 
   private async applyTextUpdateNow(text: string): Promise<void> {
     const currentState = this.getNormalizedState();
-    const aiResponse = await (this.env.AI as any).run(workersAIModel, {
-      messages: [
-        {
-          role: "system",
-          content:
-            "Extract profile updates from the user's text. For text fields return null when not mentioned. " +
-            "For list fields return add/remove arrays and never replace entire lists."
-        },
-        {
-          role: "user",
-          content: text
-        }
-      ],
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: "personal_readme_profile_patch",
-          schema: modelPatchJsonSchema,
-          strict: true
-        }
-      }
-    });
+    const systemPrompt =
+      "Extract profile updates from the user's text. For text fields return null when not mentioned. " +
+      "For list fields return add/remove arrays and never replace entire lists.";
 
-    const rawPatch = extractStructuredObject(aiResponse);
+    let rawPatch: unknown;
+
+    // Try Workers AI first, fall back to OpenAI for local dev
+    if (this.env.AI) {
+      try {
+        const aiResponse = await (this.env.AI as any).run(workersAIModel, {
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: text }
+          ],
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              name: "personal_readme_profile_patch",
+              schema: modelPatchJsonSchema,
+              strict: true
+            }
+          }
+        });
+        rawPatch = extractStructuredObject(aiResponse);
+      } catch (err) {
+        if (!this.env.OPENAI_API_KEY) throw err;
+        console.log("[agent] Workers AI unavailable, falling back to OpenAI");
+        rawPatch = await this.callOpenAI(systemPrompt, text);
+      }
+    } else {
+      rawPatch = await this.callOpenAI(systemPrompt, text);
+    }
+
     const patch = this.normalizeModelPatch(rawPatch);
     const nextState = personalReadmeProfileSchema.parse({
       ...currentState,
@@ -197,6 +215,27 @@ export class PersonalReadmeAgent extends Agent<Env, PersonalReadmeProfile> {
     });
 
     await this.setState(nextState);
+  }
+
+  private async callOpenAI(systemPrompt: string, userText: string): Promise<unknown> {
+    const client = new OpenAI({ apiKey: this.env.OPENAI_API_KEY });
+    const response = await client.responses.create({
+      model: openAIModel,
+      input: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userText }
+      ],
+      text: {
+        format: {
+          type: "json_schema",
+          name: "personal_readme_profile_patch",
+          schema: modelPatchJsonSchema,
+          strict: true
+        }
+      }
+    });
+    const text = response.output_text;
+    return JSON.parse(text);
   }
 
   private normalizeModelPatch(rawPatch: unknown): PersonalReadmeProfilePatch {
@@ -250,6 +289,7 @@ export class PersonalReadmeAgent extends Agent<Env, PersonalReadmeProfile> {
 }
 
 const workersAIModel = "@cf/zai-org/glm-4.7-flash";
+const openAIModel = "gpt-4o-mini";
 
 const modelPatchJsonSchema = {
   type: "object",

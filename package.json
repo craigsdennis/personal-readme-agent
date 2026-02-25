@@ -5,16 +5,18 @@
 	"scripts": {
 		"dev": "astro dev",
 		"build": "astro build",
-		"preview": "astro build && wrangler dev",
+		"preview": "astro build && wrangler dev --local",
 		"astro": "astro",
 		"deploy": "astro build && wrangler deploy",
-		"cf-typegen": "wrangler types"
+		"cf-typegen": "wrangler types",
+		"dev:setup": "node scripts/setup-dev-vars.mjs"
 	},
 	"dependencies": {
 		"@astrojs/cloudflare": "^12.6.12",
 		"@astrojs/react": "^4.4.1",
 		"agents": "^0.5.1",
 		"astro": "^5.17.3",
+		"openai": "^6.25.0",
 		"react": "^19.2.0",
 		"react-dom": "^19.2.0"
 	},
