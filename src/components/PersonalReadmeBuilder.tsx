@@ -2,13 +2,16 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useAgent } from "agents/react";
 import {
   type AgentRuntimeDiagnostics,
+  type TextUpdateJob,
   collaborationPreferenceOptions,
   communicationChannelOptions,
   emptyProfile,
   feedbackPreferenceOptions,
   growthAreaFocusOptions,
   meetingPreferenceOptions,
+  normalizeProfileState,
   requiredProfileFields,
+  textUpdateJobsSchema,
   timezoneOptions,
   type PersonalReadmeProfile,
   type SaveProfileResult,
@@ -73,30 +76,15 @@ export default function PersonalReadmeBuilder({ username }: EditorProps) {
   const [debugText, setDebugText] = useState("");
   const [debugStatus, setDebugStatus] = useState<DebugStatus>("idle");
   const [debugMessage, setDebugMessage] = useState("");
-  const [debugPatch, setDebugPatch] = useState("");
   const [debugErrorDetails, setDebugErrorDetails] = useState("");
   const [debugDiagnostics, setDebugDiagnostics] = useState<AgentRuntimeDiagnostics | null>(null);
+  const [debugJobs, setDebugJobs] = useState<TextUpdateJob[]>([]);
 
   const agent = useAgent<PersonalReadmeProfile>({
     agent: "PersonalReadmeAgent",
     name: normalizedUsername,
     onStateUpdate: (nextState) => {
-      setDraft({
-        username: normalizedUsername,
-        displayName: nextState.displayName ?? "",
-        role: nextState.role ?? "",
-        timezone: nextState.timezone ?? "",
-        communicationChannels: nextState.communicationChannels ?? [],
-        communicationStyle: nextState.communicationStyle ?? "",
-        collaborationPreferences: nextState.collaborationPreferences ?? [],
-        collaborationNotes: nextState.collaborationNotes ?? "",
-        feedbackPreferences: nextState.feedbackPreferences ?? [],
-        meetingPreferences: nextState.meetingPreferences ?? [],
-        focusHours: nextState.focusHours ?? "",
-        strengths: nextState.strengths ?? "",
-        growthAreaFocuses: nextState.growthAreaFocuses ?? [],
-        growthAreas: nextState.growthAreas ?? ""
-      });
+      setDraft(normalizeProfileState({ ...nextState, username: normalizedUsername }, normalizedUsername));
     }
   });
   useEffect(() => {
@@ -173,7 +161,6 @@ export default function PersonalReadmeBuilder({ username }: EditorProps) {
     event.preventDefault();
     setDebugStatus("applying");
     setDebugMessage("");
-    setDebugPatch("");
     setDebugErrorDetails("");
     setDebugDiagnostics(null);
 
@@ -190,16 +177,16 @@ export default function PersonalReadmeBuilder({ username }: EditorProps) {
         return;
       }
 
-      setDraft(result.state);
       setDebugStatus("applied");
-      setDebugMessage("Text parsed and merged into state.");
-      setDebugPatch(JSON.stringify(result.patch, null, 2));
+      setDebugMessage(`Queued text update (${result.queuedId}).`);
       setDebugDiagnostics(result.diagnostics);
+      setDebugJobs(textUpdateJobsSchema.parse(result.jobs));
+      setDebugText("");
     } catch {
       setDebugStatus("error");
       setDebugMessage("Could not apply text update.");
       setDebugErrorDetails(
-        "Request failed before a valid response. Check OPENAI_API_KEY, network access, and that your text is not empty."
+        "Request failed before a valid response. Check Workers AI binding, network access, and that your text is not empty."
       );
     }
   };
@@ -208,7 +195,6 @@ export default function PersonalReadmeBuilder({ username }: EditorProps) {
     setDebugStatus("checking");
     setDebugMessage("");
     setDebugErrorDetails("");
-    setDebugPatch("");
 
     try {
       const diagnostics = (await agent.stub.getRuntimeDiagnostics()) as AgentRuntimeDiagnostics;
@@ -220,6 +206,27 @@ export default function PersonalReadmeBuilder({ username }: EditorProps) {
       setDebugErrorDetails("Agent RPC failed while reading runtime env values.");
     }
   };
+
+  useEffect(() => {
+    let active = true;
+    const refreshJobs = async () => {
+      try {
+        const jobs = (await agent.stub.getTextUpdateJobs()) as TextUpdateJob[];
+        if (active) {
+          setDebugJobs(textUpdateJobsSchema.parse(jobs));
+        }
+      } catch {
+        // Ignore transient RPC errors during reconnects.
+      }
+    };
+
+    void refreshJobs();
+    const intervalId = window.setInterval(refreshJobs, 1500);
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+    };
+  }, [agent]);
 
   return (
     <main className="app-shell">
@@ -436,8 +443,8 @@ export default function PersonalReadmeBuilder({ username }: EditorProps) {
               <strong>{debugMessage}</strong>
               <p className="helper">Details: {debugErrorDetails}</p>
               <p className="helper">
-                Quick checks: set `OPENAI_API_KEY`, use non-empty text, and ensure the model can return structured
-                JSON.
+                Quick checks: ensure `AI` binding is configured, use non-empty text, and ensure the selected model
+                supports structured JSON.
               </p>
             </div>
           ) : null}
@@ -445,15 +452,27 @@ export default function PersonalReadmeBuilder({ username }: EditorProps) {
             <pre className="debug-output">
               {JSON.stringify(
                 {
-                  runtimeHasOpenAIKey: debugDiagnostics.hasOpenAIKey,
-                  runtimeOpenAIKeyLength: debugDiagnostics.openAIKeyLength
+                  runtimeHasWorkersAIBinding: debugDiagnostics.hasWorkersAIBinding,
+                  runtimeWorkersAIModel: debugDiagnostics.workersAIModel
                 },
                 null,
                 2
               )}
             </pre>
           ) : null}
-          {debugPatch ? <pre className="debug-output">{debugPatch}</pre> : null}
+          {debugJobs.length > 0 ? (
+            <div className="job-list">
+              <h3>Queued updates</h3>
+              <ul>
+                {debugJobs.map((job) => (
+                  <li key={job.id}>
+                    <strong>{job.status}</strong> - {job.text}
+                    {job.error ? <span className="job-error"> ({job.error})</span> : null}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </section>
       </section>
     </main>
