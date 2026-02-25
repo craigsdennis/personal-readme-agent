@@ -17,6 +17,7 @@ import {
   type SaveProfileResult,
   type UpdateFromTextResult
 } from "../lib/personal-readme-types";
+import { VoiceInput } from "./VoiceInput";
 
 const normalizeUsername = (value: string): string =>
   value.trim().toLowerCase().replace(/\s+/g, "-");
@@ -178,8 +179,7 @@ export default function PersonalReadmeBuilder({ username }: EditorProps) {
       }
 
       setDebugStatus("applied");
-      setDebugMessage(`Queued text update (${result.queuedId}).`);
-      setDebugDiagnostics(result.diagnostics);
+      setDebugMessage("Text update queued.");
       setDebugJobs(textUpdateJobsSchema.parse(result.jobs));
       setDebugText("");
     } catch {
@@ -413,11 +413,11 @@ export default function PersonalReadmeBuilder({ username }: EditorProps) {
         </form>
 
         <section className="card debug-card">
-          <h2>Debug: Update From Text</h2>
-          <p className="helper">Paste a sentence and test `updateFromText({`{"text"}`})`.</p>
+          <h2>Update From Text</h2>
+          <p className="helper">Type or speak, then apply to update your profile.</p>
           <form onSubmit={applyDebugText}>
             <label>
-              Debug text
+              Text input
               <textarea
                 value={debugText}
                 onChange={(event) => setDebugText(event.target.value)}
@@ -427,6 +427,11 @@ export default function PersonalReadmeBuilder({ username }: EditorProps) {
             </label>
             <div className="actions">
               <button type="submit">Apply text update</button>
+              <VoiceInput
+                onTranscript={(text) =>
+                  setDebugText((prev) => (prev ? `${prev}\n${text}` : text))
+                }
+              />
               <button type="button" onClick={checkRuntimeDiagnostics}>
                 Check runtime env
               </button>
@@ -448,21 +453,21 @@ export default function PersonalReadmeBuilder({ username }: EditorProps) {
               </p>
             </div>
           ) : null}
-          {debugDiagnostics ? (
-            <pre className="debug-output">
-              {JSON.stringify(
-                {
-                  runtimeHasWorkersAIBinding: debugDiagnostics.hasWorkersAIBinding,
-                  runtimeWorkersAIModel: debugDiagnostics.workersAIModel
-                },
-                null,
-                2
-              )}
-            </pre>
-          ) : null}
           {debugJobs.length > 0 ? (
             <div className="job-list">
-              <h3>Queued updates</h3>
+              <div className="job-list-header">
+                <h3>Queued updates</h3>
+                <button
+                  type="button"
+                  className="btn-clear"
+                  onClick={async () => {
+                    await agent.stub.clearTextUpdateJobs();
+                    setDebugJobs([]);
+                  }}
+                >
+                  Clear history
+                </button>
+              </div>
               <ul>
                 {debugJobs.map((job) => (
                   <li key={job.id}>

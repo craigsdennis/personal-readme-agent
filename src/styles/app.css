@@ -168,6 +168,26 @@ legend {
   margin-top: 0.85rem;
 }
 
+.job-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.btn-clear {
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 500;
+  padding: 0.3rem 0.6rem;
+  border: 1px solid var(--line);
+}
+
+.btn-clear:hover {
+  color: #b42318;
+  border-color: #f5c2c7;
+}
+
 .job-list ul {
   margin: 0.4rem 0 0;
   padding-left: 1.1rem;
@@ -242,6 +262,33 @@ legend {
 
 .readme-section li {
   margin: 0.2rem 0;
+}
+
+.voice-btn {
+  border: 0;
+  border-radius: 10px;
+  background: linear-gradient(120deg, var(--accent), var(--accent-strong));
+  color: white;
+  font-weight: 600;
+  padding: 0.7rem 1rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.voice-btn-stop {
+  background: linear-gradient(120deg, #c0392b, #e74c3c);
+  animation: pulse-record 1s ease-in-out infinite;
+}
+
+@keyframes pulse-record {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.voice-error {
+  color: #b42318;
+  font-size: 0.85rem;
+  font-weight: 500;
 }
 
 @media (min-width: 760px) {

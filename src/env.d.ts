@@ -7,4 +7,7 @@ declare namespace App {
 interface Env {
 	PersonalReadmeAgent: DurableObjectNamespace;
 	AI: Ai;
+	OPENAI_API_KEY?: string;
+	DEEPGRAM_API_KEY?: string;
 }
+

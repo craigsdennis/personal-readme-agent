@@ -235,6 +235,8 @@ export type PersonalReadmeModelPatch = z.output<typeof personalReadmeModelPatchS
 export type AgentRuntimeDiagnostics = {
   hasWorkersAIBinding: boolean;
   workersAIModel: string;
+  hasOpenAIKey: boolean;
+  openAIKeyLength: number;
 };
 
 export type TextUpdateJobStatus = z.output<typeof textUpdateJobStatusSchema>;
