@@ -15,7 +15,7 @@ export default function PersonalReadmeView({ username }: PersonalReadmeViewProps
   const normalizedUsername = normalizeUsername(username);
   const [profile, setProfile] = useState<PersonalReadmeProfile>(() => emptyProfile(normalizedUsername));
 
-  useAgent<PersonalReadmeProfile>({
+  const agent = useAgent<PersonalReadmeProfile>({
     agent: "PersonalReadmeAgent",
     name: normalizedUsername,
     onStateUpdate: (nextState) => {

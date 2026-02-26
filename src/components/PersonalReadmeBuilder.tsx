@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useAgent } from "agents/react";
 import {
   type AgentRuntimeDiagnostics,
-  type TextUpdateJob,
   collaborationPreferenceOptions,
   communicationChannelOptions,
   emptyProfile,
@@ -79,11 +78,77 @@ export default function PersonalReadmeBuilder({ username }: EditorProps) {
   const [debugMessage, setDebugMessage] = useState("");
   const [debugErrorDetails, setDebugErrorDetails] = useState("");
   const [debugDiagnostics, setDebugDiagnostics] = useState<AgentRuntimeDiagnostics | null>(null);
-  const [debugJobs, setDebugJobs] = useState<TextUpdateJob[]>([]);
+  const pendingVoiceStartRef = useRef<{
+    resolve: () => void;
+    reject: (error: Error) => void;
+    timeoutId: number;
+  } | null>(null);
+  const pendingVoiceStopRef = useRef<{
+    resolve: () => void;
+    reject: (error: Error) => void;
+    timeoutId: number;
+  } | null>(null);
 
   const agent = useAgent<PersonalReadmeProfile>({
     agent: "PersonalReadmeAgent",
     name: normalizedUsername,
+    onMessage: (event) => {
+      if (typeof event.data !== "string") {
+        return;
+      }
+      try {
+        const payload = JSON.parse(event.data) as {
+          type?: string;
+          error?: string;
+          jobs?: unknown;
+          queuedId?: string;
+        };
+        if (payload.type === "voice_stream_started") {
+          if (pendingVoiceStartRef.current) {
+            window.clearTimeout(pendingVoiceStartRef.current.timeoutId);
+            pendingVoiceStartRef.current.resolve();
+            pendingVoiceStartRef.current = null;
+          }
+          return;
+        }
+
+        if (payload.type === "voice_stream_stopped") {
+          if (pendingVoiceStopRef.current) {
+            window.clearTimeout(pendingVoiceStopRef.current.timeoutId);
+            pendingVoiceStopRef.current.resolve();
+            pendingVoiceStopRef.current = null;
+          }
+          return;
+        }
+
+        if (payload.type === "voice_stream_error") {
+          const error = payload.error ?? "Voice stream failed.";
+          if (pendingVoiceStartRef.current) {
+            window.clearTimeout(pendingVoiceStartRef.current.timeoutId);
+            pendingVoiceStartRef.current.reject(new Error(error));
+            pendingVoiceStartRef.current = null;
+          }
+          if (pendingVoiceStopRef.current) {
+            window.clearTimeout(pendingVoiceStopRef.current.timeoutId);
+            pendingVoiceStopRef.current.reject(new Error(error));
+            pendingVoiceStopRef.current = null;
+          }
+          setDebugStatus("error");
+          setDebugMessage("Voice stream failed.");
+          setDebugErrorDetails(error);
+          return;
+        }
+
+        if (payload.type !== "voice_turn_queued") {
+          return;
+        }
+
+        setDebugStatus("applied");
+        setDebugMessage(payload.queuedId ? `Voice turn queued (${payload.queuedId}).` : "Voice turn queued.");
+      } catch {
+        // Ignore non-JSON messages from agent protocol traffic.
+      }
+    },
     onStateUpdate: (nextState) => {
       setDraft(normalizeProfileState({ ...nextState, username: normalizedUsername }, normalizedUsername));
     }
@@ -180,7 +245,6 @@ export default function PersonalReadmeBuilder({ username }: EditorProps) {
 
       setDebugStatus("applied");
       setDebugMessage("Text update queued.");
-      setDebugJobs(textUpdateJobsSchema.parse(result.jobs));
       setDebugText("");
     } catch {
       setDebugStatus("error");
@@ -207,26 +271,72 @@ export default function PersonalReadmeBuilder({ username }: EditorProps) {
     }
   };
 
-  useEffect(() => {
-    let active = true;
-    const refreshJobs = async () => {
-      try {
-        const jobs = (await agent.stub.getTextUpdateJobs()) as TextUpdateJob[];
-        if (active) {
-          setDebugJobs(textUpdateJobsSchema.parse(jobs));
-        }
-      } catch {
-        // Ignore transient RPC errors during reconnects.
-      }
-    };
+  const debugJobs = useMemo(() => textUpdateJobsSchema.parse(draft.textUpdateJobs), [draft.textUpdateJobs]);
 
-    void refreshJobs();
-    const intervalId = window.setInterval(refreshJobs, 1500);
-    return () => {
-      active = false;
-      window.clearInterval(intervalId);
-    };
-  }, [agent]);
+  useEffect(
+    () => () => {
+      if (pendingVoiceStartRef.current) {
+        window.clearTimeout(pendingVoiceStartRef.current.timeoutId);
+        pendingVoiceStartRef.current.reject(new Error("Voice stream canceled"));
+        pendingVoiceStartRef.current = null;
+      }
+      if (pendingVoiceStopRef.current) {
+        window.clearTimeout(pendingVoiceStopRef.current.timeoutId);
+        pendingVoiceStopRef.current.reject(new Error("Voice stream canceled"));
+        pendingVoiceStopRef.current = null;
+      }
+    },
+    []
+  );
+
+  const startVoiceStream = useCallback(
+    (sampleRate: number) =>
+      new Promise<void>((resolve, reject) => {
+        const timeoutId = window.setTimeout(() => {
+          pendingVoiceStartRef.current = null;
+          reject(new Error("Timed out starting voice stream"));
+        }, 15000);
+        pendingVoiceStartRef.current = { resolve, reject, timeoutId };
+        agent.send(
+          JSON.stringify({
+            type: "voice_stream_start",
+            sampleRate
+          })
+        );
+      }),
+    [agent]
+  );
+
+  const sendVoiceChunk = useCallback(
+    ({ audioBase64, sampleRate }: { audioBase64: string; sampleRate: number }) => {
+      agent.send(
+        JSON.stringify({
+          type: "voice_stream_chunk",
+          audioBase64,
+          sampleRate
+        })
+      );
+      return Promise.resolve();
+    },
+    [agent]
+  );
+
+  const stopVoiceStream = useCallback(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        const timeoutId = window.setTimeout(() => {
+          pendingVoiceStopRef.current = null;
+          reject(new Error("Timed out stopping voice stream"));
+        }, 15000);
+        pendingVoiceStopRef.current = { resolve, reject, timeoutId };
+        agent.send(
+          JSON.stringify({
+            type: "voice_stream_stop"
+          })
+        );
+      }),
+    [agent]
+  );
 
   return (
     <main className="app-shell">
@@ -414,7 +524,7 @@ export default function PersonalReadmeBuilder({ username }: EditorProps) {
 
         <section className="card debug-card">
           <h2>Update From Text</h2>
-          <p className="helper">Type or speak, then apply to update your profile.</p>
+          <p className="helper">Type and apply, or use voice streaming to queue each end-of-turn automatically.</p>
           <form onSubmit={applyDebugText}>
             <label>
               Text input
@@ -428,9 +538,21 @@ export default function PersonalReadmeBuilder({ username }: EditorProps) {
             <div className="actions">
               <button type="submit">Apply text update</button>
               <VoiceInput
-                onTranscript={(text) =>
-                  setDebugText((prev) => (prev ? `${prev}\n${text}` : text))
-                }
+                onStart={async ({ sampleRate }) => {
+                  setDebugStatus("applying");
+                  setDebugMessage("Connecting voice stream...");
+                  setDebugErrorDetails("");
+                  setDebugDiagnostics(null);
+                  await startVoiceStream(sampleRate);
+                  setDebugStatus("idle");
+                  setDebugMessage("Voice stream live. Speak and watch queued updates.");
+                }}
+                onChunk={sendVoiceChunk}
+                onStop={async () => {
+                  await stopVoiceStream();
+                  setDebugStatus("idle");
+                  setDebugMessage("Voice stream stopped.");
+                }}
               />
               <button type="button" onClick={checkRuntimeDiagnostics}>
                 Check runtime env
@@ -440,6 +562,7 @@ export default function PersonalReadmeBuilder({ username }: EditorProps) {
                 {debugStatus === "checking" && "Checking runtime env..."}
                 {debugStatus === "applied" && debugMessage}
                 {debugStatus === "error" && debugMessage}
+                {debugStatus === "idle" && debugMessage}
               </span>
             </div>
           </form>
@@ -462,7 +585,6 @@ export default function PersonalReadmeBuilder({ username }: EditorProps) {
                   className="btn-clear"
                   onClick={async () => {
                     await agent.stub.clearTextUpdateJobs();
-                    setDebugJobs([]);
                   }}
                 >
                   Clear history
