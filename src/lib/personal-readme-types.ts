@@ -69,6 +69,39 @@ const usernameSchema = z
   .toLowerCase()
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lowercase letters, numbers, and hyphens");
 
+export const textUpdateJobStatusSchema = z.enum(["queued", "processing", "done", "failed"]);
+
+export const textUpdateJobSchema = z.object({
+  id: z.string(),
+  text: z.string(),
+  status: textUpdateJobStatusSchema,
+  error: z.string().optional(),
+  createdAt: z.number().int(),
+  updatedAt: z.number().int()
+});
+
+export const textUpdateJobDbRowSchema = z
+  .object({
+    id: z.string(),
+    text: z.string(),
+    status: textUpdateJobStatusSchema,
+    error: z.string().nullable(),
+    created_at: z.number().int(),
+    updated_at: z.number().int()
+  })
+  .transform((row) =>
+    textUpdateJobSchema.parse({
+      id: row.id,
+      text: row.text,
+      status: row.status,
+      error: row.error || undefined,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    })
+  );
+
+export const textUpdateJobsSchema = z.array(textUpdateJobSchema);
+
 export const personalReadmeProfileSchema = z.object({
   username: usernameSchema,
   displayName: z.string().trim().max(80).default(""),
@@ -95,7 +128,8 @@ export const personalReadmeProfileSchema = z.object({
   collaborationNotes: z.string().trim().max(300).default(""),
   focusHours: z.string().trim().max(120).default(""),
   strengths: z.string().trim().max(500).default(""),
-  growthAreas: z.string().trim().max(500).default("")
+  growthAreas: z.string().trim().max(500).default(""),
+  textUpdateJobs: textUpdateJobsSchema.default([])
 });
 
 export const personalReadmeSaveSchema = personalReadmeProfileSchema.superRefine((profile, ctx) => {
@@ -189,43 +223,36 @@ export const updateFromTextPayloadSchema = z.object({
   text: z.string().trim().min(1).max(4000)
 });
 
+export const updateFromVoiceTurnPayloadSchema = z.object({
+  audioBase64: z.string().trim().min(1),
+  sampleRate: z.number().int().min(8000).max(48000).default(16000)
+});
+
+export const voiceStreamStartMessageSchema = z.object({
+  type: z.literal("voice_stream_start"),
+  sampleRate: z.number().int().min(8000).max(48000).default(16000)
+});
+
+export const voiceStreamChunkMessageSchema = z.object({
+  type: z.literal("voice_stream_chunk"),
+  audioBase64: z.string().trim().min(1),
+  sampleRate: z.number().int().min(8000).max(48000).default(16000)
+});
+
+export const voiceStreamStopMessageSchema = z.object({
+  type: z.literal("voice_stream_stop")
+});
+
+export const voiceStreamClientMessageSchema = z.discriminatedUnion("type", [
+  voiceStreamStartMessageSchema,
+  voiceStreamChunkMessageSchema,
+  voiceStreamStopMessageSchema
+]);
+
 export const queuedTextUpdatePayloadSchema = z.object({
   id: z.string().trim().min(1),
   text: z.string().trim().min(1).max(4000)
 });
-
-export const textUpdateJobStatusSchema = z.enum(["queued", "processing", "done", "failed"]);
-
-export const textUpdateJobSchema = z.object({
-  id: z.string(),
-  text: z.string(),
-  status: textUpdateJobStatusSchema,
-  error: z.string().optional(),
-  createdAt: z.number().int(),
-  updatedAt: z.number().int()
-});
-
-export const textUpdateJobDbRowSchema = z
-  .object({
-    id: z.string(),
-    text: z.string(),
-    status: textUpdateJobStatusSchema,
-    error: z.string().nullable(),
-    created_at: z.number().int(),
-    updated_at: z.number().int()
-  })
-  .transform((row) =>
-    textUpdateJobSchema.parse({
-      id: row.id,
-      text: row.text,
-      status: row.status,
-      error: row.error || undefined,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at
-    })
-  );
-
-export const textUpdateJobsSchema = z.array(textUpdateJobSchema);
 
 export type PersonalReadmeProfile = z.output<typeof personalReadmeProfileSchema>;
 export type PersonalReadmeProfileInput = z.input<typeof personalReadmeProfileSchema>;
@@ -235,8 +262,6 @@ export type PersonalReadmeModelPatch = z.output<typeof personalReadmeModelPatchS
 export type AgentRuntimeDiagnostics = {
   hasWorkersAIBinding: boolean;
   workersAIModel: string;
-  hasOpenAIKey: boolean;
-  openAIKeyLength: number;
 };
 
 export type TextUpdateJobStatus = z.output<typeof textUpdateJobStatusSchema>;
@@ -267,6 +292,24 @@ export type UpdateFromTextResult =
       diagnostics: AgentRuntimeDiagnostics;
       cause?: string;
     };
+
+export type UpdateFromVoiceTurnResult =
+  | {
+      ok: true;
+      transcript: string;
+      queuedId: string;
+      jobs: TextUpdateJob[];
+      diagnostics: AgentRuntimeDiagnostics;
+    }
+  | {
+      ok: false;
+      error: string;
+      diagnostics: AgentRuntimeDiagnostics;
+      transcript?: string;
+      cause?: string;
+    };
+
+export type VoiceStreamClientMessage = z.output<typeof voiceStreamClientMessageSchema>;
 
 export const emptyProfile = (username = ""): PersonalReadmeProfile =>
   personalReadmeProfileSchema.parse({
