@@ -17,10 +17,10 @@ export default defineConfig({
     imageService: "cloudflare",
     ...(isDevCommand
       ? {}
-      : {
+        : {
           workerEntryPoint: {
             path: "src/worker.ts",
-            namedExports: ["PersonalReadmeAgent"]
+            namedExports: ["PersonalReadmeAgent", "PersonalReadmeTextUpdateWorkflow"]
           }
         })
   })

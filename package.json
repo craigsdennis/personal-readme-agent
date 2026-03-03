@@ -14,13 +14,13 @@
 	"dependencies": {
 		"@astrojs/cloudflare": "^12.6.12",
 		"@astrojs/react": "^4.4.1",
-		"agents": "^0.6.0",
-		"astro": "^5.17.3",
+		"agents": "^0.7.2",
+		"astro": "^5.18.0",
 		"react": "^19.2.0",
 		"react-dom": "^19.2.0"
 	},
 	"devDependencies": {
-		"@types/node": "^25.2.2",
-		"wrangler": "^4.68.1"
+		"@types/node": "^25.3.3",
+		"wrangler": "^4.69.0"
 	}
 }

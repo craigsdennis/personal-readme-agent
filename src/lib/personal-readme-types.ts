@@ -249,9 +249,14 @@ export const voiceStreamClientMessageSchema = z.discriminatedUnion("type", [
   voiceStreamStopMessageSchema
 ]);
 
-export const queuedTextUpdatePayloadSchema = z.object({
-  id: z.string().trim().min(1),
+export const textUpdateWorkflowParamsSchema = z.object({
+  jobId: z.string().trim().min(1),
   text: z.string().trim().min(1).max(4000)
+});
+
+export const textUpdateWorkflowResultSchema = z.object({
+  jobId: z.string().trim().min(1),
+  patch: personalReadmeModelPatchSchema
 });
 
 export type PersonalReadmeProfile = z.output<typeof personalReadmeProfileSchema>;
@@ -310,6 +315,8 @@ export type UpdateFromVoiceTurnResult =
     };
 
 export type VoiceStreamClientMessage = z.output<typeof voiceStreamClientMessageSchema>;
+export type TextUpdateWorkflowParams = z.output<typeof textUpdateWorkflowParamsSchema>;
+export type TextUpdateWorkflowResult = z.output<typeof textUpdateWorkflowResultSchema>;
 
 export const emptyProfile = (username = ""): PersonalReadmeProfile =>
   personalReadmeProfileSchema.parse({

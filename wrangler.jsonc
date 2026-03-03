@@ -19,6 +19,13 @@
 	"ai": {
 		"binding": "AI"
 	},
+	"workflows": [
+		{
+			"binding": "TEXT_UPDATE_WORKFLOW",
+			"name": "personal-readme-text-update",
+			"class_name": "PersonalReadmeTextUpdateWorkflow"
+		}
+	],
 	"observability": {
 		"enabled": true
 	},
@@ -37,7 +44,7 @@
 				"PersonalReadmeAgent"
 			]
 		}
-	]
+	],
 	/**
 	 * Smart Placement
 	 * https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement
