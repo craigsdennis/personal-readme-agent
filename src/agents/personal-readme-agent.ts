@@ -40,6 +40,7 @@ const jsonResponse = (body: unknown, status = 200): Response =>
 type LiveVoiceSession = {
   socket: WebSocket;
   latestTranscript: string;
+  stopping: boolean;
 };
 
 export class PersonalReadmeAgent extends Agent<Env, PersonalReadmeProfile> {
@@ -460,6 +461,7 @@ export class PersonalReadmeAgent extends Agent<Env, PersonalReadmeProfile> {
   }
 
   override async onClose(connection: Connection): Promise<void> {
+    // Ensure only one active Flux socket per client connection before opening a new one.
     this.stopVoiceSession(connection, false);
   }
 
@@ -494,7 +496,8 @@ export class PersonalReadmeAgent extends Agent<Env, PersonalReadmeProfile> {
 
       const session: LiveVoiceSession = {
         socket,
-        latestTranscript: ""
+        latestTranscript: "",
+        stopping: false
       };
       this.liveVoiceSessions.set(connection.id, session);
 
@@ -528,9 +531,17 @@ export class PersonalReadmeAgent extends Agent<Env, PersonalReadmeProfile> {
         );
       });
 
-      socket.addEventListener("close", () => {
+      socket.addEventListener("close", (event) => {
         if (this.liveVoiceSessions.get(connection.id)?.socket === socket) {
           this.liveVoiceSessions.delete(connection.id);
+        }
+        if (!session.stopping) {
+          connection.send(
+            JSON.stringify({
+              type: "voice_stream_error",
+              error: `Flux stream closed unexpectedly (code ${event.code}${event.reason ? `, reason: ${event.reason}` : ""})`
+            })
+          );
         }
       });
 
@@ -580,6 +591,7 @@ export class PersonalReadmeAgent extends Agent<Env, PersonalReadmeProfile> {
     }
 
     this.liveVoiceSessions.delete(connection.id);
+    session.stopping = true;
     try {
       session.socket.close(1000, "client_stop");
     } catch {
