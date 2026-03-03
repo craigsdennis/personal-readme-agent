@@ -7,4 +7,5 @@ declare namespace App {
 interface Env {
 	PersonalReadmeAgent: DurableObjectNamespace;
 	AI: Ai;
+	TEXT_UPDATE_WORKFLOW: Workflow;
 }
