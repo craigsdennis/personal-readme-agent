@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useAgent } from "agents/react";
 import { emptyProfile, type PersonalReadmeProfile } from "../lib/personal-readme-types";
+import { AppFooter } from "./AppFooter";
 
 type PersonalReadmeViewProps = {
   username: string;
@@ -129,6 +130,7 @@ export default function PersonalReadmeView({ username }: PersonalReadmeViewProps
           </section>
         </section>
       </article>
+      <AppFooter />
     </main>
   );
 }

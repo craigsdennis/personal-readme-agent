@@ -16,6 +16,7 @@ import {
   type SaveProfileResult,
   type UpdateFromTextResult
 } from "../lib/personal-readme-types";
+import { AppFooter } from "./AppFooter";
 import { VoiceInput } from "./VoiceInput";
 
 const normalizeUsername = (value: string): string =>
@@ -602,6 +603,7 @@ export default function PersonalReadmeBuilder({ username }: EditorProps) {
           ) : null}
         </section>
       </section>
+      <AppFooter />
     </main>
   );
 }

@@ -3,54 +3,65 @@
 ## Project Goal
 Build an educational demo that creates a “Personal README” for co-workers using:
 - Cloudflare Agents SDK for per-user stateful agents
+- Cloudflare Workflows for parallel text-update processing
 - Astro for hosting/display
 - React + `useAgent` for interactive UI
 
 ## Current Architecture
-- `src/worker.ts`: Custom Cloudflare worker entrypoint exporting Astro server + Durable Object class
-- `src/agents/personal-readme-agent.ts`: `PersonalReadmeAgent` class with callable methods for save, AI text updates, and runtime diagnostics
-- `src/pages/agents/[...route].ts`: Agents SDK request routing (`routeAgentRequest`)
-- `src/components/PersonalReadmeBuilder.tsx`: Editor UI using `useAgent` + debug tools for AI update testing
-- `src/components/PersonalReadmeView.tsx`: Read-only “nice text” view wired live to agent state
-- `src/lib/personal-readme-types.ts`: Shared profile schema + Zod validation + AI patch schemas
-- `src/pages/index.astro`: App shell mounting React component
-- `src/pages/u/[username].astro`: Per-user editor route
-- `src/pages/u/[username]/view.astro`: Per-user read-only display route
-- `wrangler.jsonc`: Durable Object binding + migrations
-- `.dev.vars` / `.dev.vars.example`: Local worker env vars
+- `src/worker.ts`: Custom worker entrypoint exporting Astro server, `PersonalReadmeAgent`, and `PersonalReadmeTextUpdateWorkflow`.
+- `src/agents/personal-readme-agent.ts`: Main per-user agent state machine, callable API methods, live voice stream handling, and workflow callbacks.
+- `src/workflows/personal-readme-text-update-workflow.ts`: Workflow that extracts profile patch data from free-form text using Workers AI.
+- `src/pages/agents/[...route].ts`: Agents SDK request routing (`routeAgentRequest`).
+- `src/components/PersonalReadmeBuilder.tsx`: Editor UI (`useAgent`) with form editing, text updates, live voice streaming controls, and job status display.
+- `src/components/VoiceInput.tsx`: Client microphone capture + PCM chunk streaming over `agent.send`.
+- `src/components/PersonalReadmeView.tsx`: Read-only profile view that updates live from agent state.
+- `src/components/AppFooter.tsx`: Shared sticky footer with project links.
+- `src/lib/personal-readme-types.ts`: Shared schema/types for profile state, jobs, workflow payloads/results, and runtime diagnostics.
+- `src/lib/personal-readme-ai.ts`: Shared AI model constants + structured output normalization helpers.
+- `src/pages/index.astro`: App shell mounting launcher.
+- `src/pages/u/[username].astro`: Per-user editor route.
+- `src/pages/u/[username]/view.astro`: Per-user read-only route.
+- `src/styles/app.css`: Global styles including sticky footer styles.
+- `wrangler.jsonc`: Durable Object + Workflow bindings and migrations.
 
 ## Agent Methods (Current)
 - `saveProfile(payload)`: Validates and saves full profile via Zod.
-- `updateFromText({ text })`: Uses Workers AI structured JSON output to extract updates, then merges into current state.
-- `getRuntimeDiagnostics()`: Returns runtime env diagnostics (for example, whether `AI` binding is visible in the agent runtime and which model is selected).
+- `updateFromText({ text })`: Creates a text update job in state, then starts `TEXT_UPDATE_WORKFLOW` for asynchronous processing.
+- `updateFromVoiceTurn({ audioBase64, sampleRate })`: One-shot Flux transcription helper (kept for compatibility/debug).
+- `getTextUpdateJobs()`: Returns `textUpdateJobs` from current state.
+- `clearTextUpdateJobs()`: Clears in-state job history.
+- `getRuntimeDiagnostics()`: Returns runtime diagnostics (Workers AI binding + model selection).
 
-## AI Update Behavior
-- Structured output schema is separate from UI schema to satisfy Workers AI structured JSON constraints.
-- Checkbox/list fields are updated incrementally using `add`/`remove` operations (not full replacement).
-- Text fields remain nullable in model output and are merged only when provided.
+## Live Voice Streaming Behavior
+- Client sends `voice_stream_start`, `voice_stream_chunk`, and `voice_stream_stop` via `agent.send`.
+- Agent opens one Flux websocket per connected client session.
+- Each Flux `EndOfTurn` transcript triggers `updateFromText`.
+- Jobs are visible in `state.textUpdateJobs` and update live in the UI.
+
+## Workflow Behavior
+- `updateFromText` starts a workflow immediately (`runWorkflow`), so turns can process in parallel.
+- Workflow callbacks (`onWorkflowProgress`, `onWorkflowComplete`, `onWorkflowError`) update job status in agent state.
+- On workflow completion, the resulting model patch is merged into the latest profile state.
 
 ## Development Workflow
 1. Install dependencies: `npm install`
 2. Run local dev: `npm run dev`
 3. Build check: `npm run build`
 4. Preview on worker runtime: `npm run preview`
+5. Deploy: `npm run deploy`
 
 ## Implementation Rules
-- Keep Durable Object class names, exports, and Wrangler bindings in sync.
-- Keep agent state schema in one shared types file.
-- Prefer adding features as vertical slices:
-  1. Agent state/API behavior
-  2. Route wiring
-  3. UI form/read model
-  4. Rendered README output
+- Keep Durable Object class names/exports and Wrangler bindings in sync.
+- Keep profile/job/workflow schemas in `src/lib/personal-readme-types.ts`.
+- Keep AI extraction schema/normalization logic in `src/lib/personal-readme-ai.ts`.
+- Prefer vertical slices:
+  1. Agent/workflow behavior
+  2. Routing/bindings
+  3. UI updates
+  4. Display/output polish
 - Avoid introducing backend frameworks beyond Astro + Agents unless necessary.
-
-## Next Planned Slice
-- Generate a markdown Personal README preview from saved agent state.
-- Add “Copy markdown” and “Download .md” actions.
-- Add “view as markdown” mode on the read-only page.
 
 ## Notes
 - This repo is an educational demo; optimize for readability over abstraction.
 - Keep changes incremental and easy to review.
-- When debugging env vars, prefer checking from inside the Agent runtime (not only from shell env).
+- For env/runtime debugging, prefer checks from inside the Agent runtime.
