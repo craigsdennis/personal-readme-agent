@@ -10,7 +10,7 @@ import {
   timezoneOptions
 } from "./personal-readme-types";
 
-export const workersAIModel = "@cf/zai-org/glm-4.7-flash";
+export const workersAIModel = "@cf/nvidia/nemotron-3-120b-a12b";
 export const workersAIFluxModel = "@cf/deepgram/flux";
 
 export const modelPatchJsonSchema = {

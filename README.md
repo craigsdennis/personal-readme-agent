@@ -10,7 +10,7 @@ flowchart TD
   Agent["PersonalReadmeAgent (Durable Object)"]
   Flux["Workers AI WebSocket: @cf/deepgram/flux"]
   Wf["PersonalReadmeTextUpdateWorkflow"]
-  Gen["Workers AI Structured Output: @cf/zai-org/glm-4.7-flash"]
+  Gen["Workers AI Structured Output: @cf/nvidia/nemotron-3-120b-a12b"]
   State["Agent State (Profile + textUpdateJobs)"]
   View["Editor + Read-only View"]
 
